@@ -1,0 +1,34 @@
+name: vapor
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: 'The environment name'
+        default: 'staging'
+        required: false
+        type: string
+
+jobs:
+  vapor:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: 8.2
+          tools: vapor
+          coverage: none
+        env:
+          GITHUB_TOKEN: "${{ secrets.MY_TOKEN }}"
+
+      - name: Install PHP dependencies
+        run: composer install --no-interaction --quiet --no-progress --ansi --no-dev --optimize-autoloader
+
+      - name: Deploy Environment
+        run: vapor deploy ${{ inputs.environment }} --without-waiting --commit=$GITHUB_SHA --message=$GITHUB_REF_NAME
+        env:
+          VAPOR_API_TOKEN: ${{ secrets.VAPOR_API_TOKEN }}

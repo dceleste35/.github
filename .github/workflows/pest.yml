@@ -1,0 +1,64 @@
+name: pest
+
+on:
+  workflow_call:
+    inputs:
+      coverage:
+        description: 'The minimum percentage of coverage'
+        default: 25
+        required: false
+        type: string
+
+jobs:
+  pest:
+    runs-on: ubuntu-latest
+    env:
+      DB_DATABASE: laravel
+      DB_USERNAME: root
+      DB_PASSWORD: password
+
+    services:
+      mysql:
+          image: mysql:latest
+          env:
+            MYSQL_ALLOW_EMPTY_PASSWORD: false
+            MYSQL_ROOT_PASSWORD: password
+            MYSQL_DATABASE: laravel
+          ports:
+              - 3306
+          options: --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=3
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          coverage: pcov
+          php-version: 8.2
+        env:
+          GITHUB_TOKEN: "${{ secrets.MY_TOKEN }}"
+
+      - name: Remove local dependencies
+        run: composer config repositories.local --unset
+
+      - name: Install PHP dependencies
+        run: composer install --no-interaction --quiet --no-progress --ansi
+
+      - name: Copy Laravel Environment Configuration File
+        run: php -r "file_exists('.env') || copy('.env.example', '.env');"
+
+      - name: Generate key
+        run: php artisan key:generate
+
+      - name: Install NPM dependencies
+        run: npm ci
+
+      - name: Compile assets
+        run: npm run build
+
+      - name: Execute tests
+        run: php artisan test --ansi --coverage --min=${{ inputs.coverage }}
+        env:
+          DB_PORT: ${{ job.services.mysql.ports[3306] }}

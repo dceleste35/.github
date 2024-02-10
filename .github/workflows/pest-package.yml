@@ -1,0 +1,78 @@
+name: pest-package
+
+on:
+  workflow_call:
+    inputs:
+      coverage:
+        description: 'The minimum percentage of coverage'
+        default: 25
+        required: false
+        type: string
+      os:
+        description: 'List of OS'
+        default: '["ubuntu-latest", "windows-latest"]'
+        required: false
+        type: string
+      php:
+        description: 'List of PHP Versions'
+        default: '[8.3, 8.2, 8.1]'
+        required: false
+        type: string
+      laravel:
+        description: 'List of PHP Versions'
+        default: '["10.*"]'
+        required: false
+        type: string
+      stability:
+        description: 'List of PHP Versions'
+        default: '["prefer-lowest", "prefer-stable"]'
+        required: false
+        type: string
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 5
+    strategy:
+      fail-fast: true
+      matrix:
+        os: ${{ fromJSON(inputs.os)}}
+        php: ${{ fromJSON(inputs.php)}}
+        laravel: ${{ fromJSON(inputs.laravel)}}
+        stability: ${{ fromJSON(inputs.stability)}}
+        include:
+          - laravel: 10.*
+            testbench: 8.*
+            carbon: ^2.63
+
+    name: P${{ matrix.php }} - L${{ matrix.laravel }} - ${{ matrix.stability }} - ${{ matrix.os }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: dom, curl, libxml, mbstring, zip, pcntl, pdo, sqlite, pdo_sqlite, bcmath, soap, intl, gd, exif, iconv, imagick, fileinfo
+          coverage: pcov
+
+      - name: Setup problem matchers
+        run: |
+          echo "::add-matcher::${{ runner.tool_cache }}/php.json"
+          echo "::add-matcher::${{ runner.tool_cache }}/phpunit.json"
+
+      - name: Install dependencies
+        run: |
+          composer require "laravel/framework:${{ matrix.laravel }}" "orchestra/testbench:${{ matrix.testbench }}" "nesbot/carbon:${{ matrix.carbon }}" --no-interaction --no-update
+          composer update --${{ matrix.stability }} --prefer-dist --no-interaction
+
+      - name: List Installed Dependencies
+        run: composer show -D
+        
+      - name: Build assets
+        run: composer build
+
+      - name: Execute tests
+        run: vendor/bin/pest --ci --colors="always" --coverage --min=${{ inputs.coverage }}
